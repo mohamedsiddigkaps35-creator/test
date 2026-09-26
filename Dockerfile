@@ -1,8 +1,13 @@
-# استخدام نسخة PHP رسمية مدمج معها خادم Apache
+# استخدام نسخة PHP الرسمية مع خادم Apache
 FROM php:8.2-apache
 
-# نسخ ملفات مشروعك إلى مجمل العمل داخل السيرفر
+# إجبار السيرفر على الاستماع للمنفذ 80 بشكل داخلي صارم
+ENV PORT=80
+RUN sed -i 's/Listen 80/Listen ${PORT}/g' /etc/apache2/ports.conf
+RUN sed -i 's/<VirtualHost \*:80>/<VirtualHost \*:${PORT}>/g' /etc/apache2/sites-available/000-default.conf
+
+# نسخ ملفات مشروعك
 COPY . /var/www/html/
 
-# تحديد المنفذ الافتراضي الذي تستمع له المنصة
+# فتح المنفذ للخارج
 EXPOSE 80
